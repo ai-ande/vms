@@ -41,7 +41,10 @@ install -d -o vmhost -g ajklog -m 2775 /usr/local/var/lib/ajk/deployed
 sudo -u akaplan mkdir -p "$AGENTS"
 install -o akaplan -g staff -m 644 "$M/$LABEL.plist" "$PLIST"
 launchctl bootout gui/$AKUID/$LABEL 2>/dev/null || true
-launchctl bootstrap gui/$AKUID "$PLIST"
+_i=0; while launchctl print gui/$AKUID/$LABEL >/dev/null 2>&1 && [ $_i -lt 30 ]; do sleep 0.2; _i=$((_i+1)); done
+launchctl bootstrap gui/$AKUID "$PLIST" 2>/dev/null \
+  || launchctl kickstart -k gui/$AKUID/$LABEL 2>/dev/null \
+  || echo "WARN: could not (re)load $LABEL"
 
 sha="$( (sudo -u akaplan git -C "$M/.." rev-parse HEAD 2>/dev/null) || echo unknown )"
 printf '{"sha":"%s","ts":"%s"}\n' "$sha" "$(date '+%Y-%m-%dT%H:%M:%S%z')" > "$MARKER"

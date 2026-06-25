@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ajk.ha-backup-mirror</string>
+  <!-- A LaunchAgent (NOT a system daemon): it must run inside akaplan's GUI
+       session so the Proton Drive session in akaplan's login Keychain is
+       reachable. Bootstrapped into gui/<akaplan-uid>. Runs daily at 06:00. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/libexec/ajk/ha-backup-mirror.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/ajk/vms/ha-backup-mirror/stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/ajk/vms/ha-backup-mirror/stderr.log</string>
+</dict>
+</plist>

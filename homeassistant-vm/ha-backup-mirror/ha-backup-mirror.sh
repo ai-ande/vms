@@ -20,7 +20,9 @@ export RR_PROJECT RR_JOB RR_HB_URL RR_ERR_URL
 . /usr/local/libexec/ajk/run-record.sh
 
 SRC="/Users/Shared/ha-backups"
-REMOTE="/Backups/Home-Assistant"  # Proton Drive destination (full path; parents auto-created)
+# Proton Drive paths are rooted at /my-files (`/` only lists sections). Full path,
+# parents auto-created; the user's /Backups/Home-Assistant lives under /my-files.
+REMOTE="/my-files/Backups/Home-Assistant"
 PROTON="${PROTON_DRIVE:-$(command -v proton-drive 2>/dev/null)}"
 [ -n "$PROTON" ] && [ -x "$PROTON" ] || PROTON=/opt/homebrew/bin/proton-drive
 JQ=/usr/bin/jq

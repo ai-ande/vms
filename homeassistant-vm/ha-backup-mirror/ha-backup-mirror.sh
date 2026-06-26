@@ -20,7 +20,7 @@ export RR_PROJECT RR_JOB RR_HB_URL RR_ERR_URL
 . /usr/local/libexec/ajk/run-record.sh
 
 SRC="/Users/Shared/ha-backups"
-REMOTE="HomeAssistantBackups"    # Proton Drive destination folder (at the root)
+REMOTE="/Backups/Home-Assistant"  # Proton Drive destination (full path; parents auto-created)
 PROTON="${PROTON_DRIVE:-$(command -v proton-drive 2>/dev/null)}"
 [ -n "$PROTON" ] && [ -x "$PROTON" ] || PROTON=/opt/homebrew/bin/proton-drive
 JQ=/usr/bin/jq
@@ -31,6 +31,14 @@ trap '/bin/rm -f "$PD_ERR" 2>/dev/null' EXIT
 pd_list()    { "$PROTON" filesystem list "$1" --json 2>"$PD_ERR"; }
 names_from() { "$JQ" -r '(.[]?,.entries[]?,.files[]?,.items[]?)|.name? // empty' 2>/dev/null; }
 contains()   { local n="$1"; shift; local x; for x in "$@"; do [ "$x" = "$n" ] && return 0; done; return 1; }
+ensure_remote_dir() {  # create each component of $REMOTE under the root, then confirm
+  local acc="" comp
+  for comp in ${(s:/:)REMOTE}; do
+    "$PROTON" filesystem create-folder "${acc:-/}" "$comp" >/dev/null 2>"$PD_ERR" || true
+    acc="$acc/$comp"
+  done
+  "$PROTON" filesystem list "$REMOTE" --json >/dev/null 2>"$PD_ERR"
+}
 
 # --- preconditions --------------------------------------------------------
 [ -d "$SRC" ] || { rr_emit fail "source missing: $SRC"; exit 1; }
@@ -55,12 +63,12 @@ fi
 
 # --- list the backup folder; create it once if it doesn't exist yet --------
 typeset -a remote_tars
-if remote_json="$(pd_list "/$REMOTE")"; then
+if remote_json="$(pd_list "$REMOTE")"; then
   remote_tars=( ${(f)"$(names_from <<< "$remote_json")"} )
-elif "$PROTON" filesystem create-folder "/" "$REMOTE" >/dev/null 2>"$PD_ERR"; then
+elif ensure_remote_dir; then
   remote_tars=()
 else
-  rr_emit fail "could not create /$REMOTE in Proton Drive: $(< "$PD_ERR")"
+  rr_emit fail "could not create $REMOTE in Proton Drive: $(< "$PD_ERR")"
   exit 1
 fi
 
@@ -69,7 +77,7 @@ typeset -i uploaded=0
 local f
 for f in $local_tars; do
   if ! contains "$f" "${remote_tars[@]:-}"; then
-    if "$PROTON" filesystem upload "$SRC/$f" "/$REMOTE" >/dev/null 2>"$PD_ERR"; then
+    if "$PROTON" filesystem upload "$SRC/$f" "$REMOTE" >/dev/null 2>"$PD_ERR"; then
       (( uploaded++ ))
     else
       rr_emit fail "upload failed: $f — $(< "$PD_ERR")"
@@ -79,7 +87,7 @@ for f in $local_tars; do
 done
 
 # --- verify every local backup is now present in Proton Drive -------------
-remote_tars=( ${(f)"$(pd_list "/$REMOTE" | names_from)"} )
+remote_tars=( ${(f)"$(pd_list "$REMOTE" | names_from)"} )
 typeset -i verified=0 missing=0
 for f in $local_tars; do
   if contains "$f" "${remote_tars[@]:-}"; then (( verified++ )); else (( missing++ )); fi

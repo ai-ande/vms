@@ -31,7 +31,8 @@ trap '/bin/rm -f "$PD_ERR" 2>/dev/null' EXIT
 
 # proton-drive list: stdout = JSON, real error -> $PD_ERR, returns CLI exit code.
 pd_list()    { "$PROTON" filesystem list "$1" --json 2>"$PD_ERR"; }
-names_from() { "$JQ" -r '(.[]?,.entries[]?,.files[]?,.items[]?)|.name? // empty' 2>/dev/null; }
+# proton-drive names are objects: {"name":{"ok":true,"value":"file.tar"}} — pull .value.
+names_from() { "$JQ" -r '(.[]?,.entries?[]?,.files?[]?,.items?[]?)|(.name.value? // .name?)//empty' 2>/dev/null; }
 contains()   { local n="$1"; shift; local x; for x in "$@"; do [ "$x" = "$n" ] && return 0; done; return 1; }
 ensure_remote_dir() {  # create each component of $REMOTE under the root, then confirm
   local acc="" comp

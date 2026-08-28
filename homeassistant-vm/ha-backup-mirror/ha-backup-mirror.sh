@@ -35,8 +35,16 @@ SRC="/Users/Shared/ha-backups"
 # Proton Drive paths are rooted at /my-files (`/` only lists sections). Full path,
 # parents auto-created; the user's /Backups/Home-Assistant lives under /my-files.
 REMOTE="/my-files/Backups/Home-Assistant"
-PROTON="${PROTON_DRIVE:-$(command -v proton-drive 2>/dev/null)}"
-[ -n "$PROTON" ] && [ -x "$PROTON" ] || PROTON=/opt/homebrew/bin/proton-drive
+# Prefer the installer-pinned CLI (root-owned, checksum-verified, kept current
+# by ./install.sh); fall back to whatever is on the box only during transition.
+PD_PIN=/usr/local/libexec/ajk/bin/proton-drive
+PROTON="${PROTON_DRIVE:-}"
+if [ -z "$PROTON" ]; then
+  for _cand in "$PD_PIN" "$(command -v proton-drive 2>/dev/null)" /opt/homebrew/bin/proton-drive; do
+    [ -n "$_cand" ] && [ -x "$_cand" ] && { PROTON="$_cand"; break; }
+  done
+fi
+[ -n "$PROTON" ] || PROTON="$PD_PIN"
 JQ=/usr/bin/jq
 PD_ERR=$(/usr/bin/mktemp -t habackup 2>/dev/null) || PD_ERR=/tmp/habackup.err
 trap '/bin/rm -f "$PD_ERR" 2>/dev/null' EXIT
@@ -75,7 +83,7 @@ ensure_remote_dir() {  # create each component of $REMOTE under the root, then c
 # --- preconditions --------------------------------------------------------
 [ -d "$SRC" ] || { rr_emit fail "source missing: $SRC"; exit 1; }
 [ -r "$SRC" ] || { rr_emit fail "source not readable by $(id -un) (akaplan ACL missing?): $SRC"; exit 1; }
-[ -x "$PROTON" ] || { rr_emit fail "proton-drive CLI not found ($PROTON); brew install it + 'proton-drive auth login' as akaplan"; exit 1; }
+[ -x "$PROTON" ] || { rr_emit fail "proton-drive CLI not found ($PROTON); run the vms installer (pins it), then 'proton-drive auth login' as akaplan"; exit 1; }
 
 typeset -a local_tars
 local_tars=( "$SRC"/*.tar(N:t) )
@@ -105,7 +113,6 @@ fi
 
 # --- upload any local backup not already present remotely ------------------
 typeset -i uploaded=0
-local f
 for f in $local_tars; do
   if ! contains "$f" "${remote_tars[@]:-}"; then
     if pd_run filesystem upload "$SRC/$f" "$REMOTE" >/dev/null; then
@@ -120,8 +127,15 @@ done
 # --- verify every local backup is present in Proton Drive ------------------
 # Only re-list after uploads; on a no-op day the first listing IS the proof,
 # and skipping the re-list keeps the daily steady state at one CLI call.
+# A failed verify listing is reported as ITSELF (the real CLI error), not as
+# a bogus "backups not present".
 if (( uploaded > 0 )); then
-  remote_tars=( ${(f)"$(pd_list "$REMOTE" | names_from)"} )
+  if remote_json="$(pd_list "$REMOTE")"; then
+    remote_tars=( ${(f)"$(names_from <<< "$remote_json")"} )
+  else
+    rr_emit fail "verify listing failed after upload: $(< "$PD_ERR")"
+    exit 1
+  fi
 fi
 typeset -i verified=0 missing=0
 for f in $local_tars; do
